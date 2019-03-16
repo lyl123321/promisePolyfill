@@ -349,6 +349,6 @@ setTimeout(function() {
 https://codepen.io/lyl123321/pen/drmKwr?editors=0010
 
 也可以点这里查看源代码：
-https://github.com/lyl123321/promisePolyfill
+https://github.com/lyl123321/promisePolyfill/blob/master/src/polyfill.js
 ## 结语 ##
 本菜鸡终于做完这个 Promise 的 polyfill 了，各种改 bug 累个半死，还是老老实实滚去做毕设好了:)
