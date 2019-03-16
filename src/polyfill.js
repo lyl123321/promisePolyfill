@@ -1,4 +1,5 @@
 'use strict';
+//事件发布者构造函数
 function Events() {
     this._listeners = {};
 }
@@ -113,24 +114,26 @@ Events.prototype = {
 		then: function(onFulfilled, onRejected) {
 			var pro = new Promise();
 			
+			//绑定回调函数，onFulfilled 和 onRejected 用一个回调函数处理
 			this.events.addEvent('change', hander.bind(null, this));
 			
 			function hander(that) {
-				var res;
+				var res;	//onFulfilled 或 onRejected 回调函数执行后得到的结果
 				
 				try {
 					if(that.status === 'fulfilled') {
-						//onFulfilled == null ? pro._status = that.status : false;
-						
+						//如果onFulfilled不是函数，它会在then方法内部被替换成一个 Identity 函数
 						typeof onFulfilled !== 'function' ? onFulfilled = identity : false;
-						
+						//将参数 that.value 传入 onFulfilled 并执行，将结果赋给 res
 						res = onFulfilled.call(null, that.value);
 					} else if(that.status === 'rejected') {
+						//如果onRejected不是函数，它会在then方法内部被替换成一个 Thrower 函数
 						typeof onRejected !== 'function' ? onRejected = thrower : false;
 						
 						res = onRejected.call(null, that.reason);
 					}
 				} catch(err) {
+					//抛出一个错误，情况3
 					pro.reason = err;
 					pro.status = 'rejected';
 					
@@ -138,14 +141,15 @@ Events.prototype = {
 				}
 				
 				if(res instanceof Promise) {
-					if(res.status === 'fulfilled') {
+					if(res.status === 'fulfilled') {		//情况4
 						pro.value = res.value;
 						pro.status = 'fulfilled';
-					} else if (res.status === 'rejected') {
+					} else if (res.status === 'rejected') {	//情况5
 						pro.reason = res.reason;
 						pro.status = 'rejected';
-					} else {
+					} else {								//情况6
 						//res.status === 'pending'时，pro 跟随 res
+						pro.status = 'pending';
 						res.then(function(value){
 							pro.value = value;
 							pro.status = 'fulfilled';
@@ -153,9 +157,9 @@ Events.prototype = {
 							pro.reason = reason;
 							pro.status = 'rejected';
 						});
-						pro.status = 'pending';
 					}
 				} else {
+					//回调函数返回一个值或不返回任何内容，情况1、2
 					pro.value = res;
 					pro.status = 'fulfilled';
 				}
@@ -190,6 +194,7 @@ Events.prototype = {
 					pro.status = 'rejected';
 				} else if(res instanceof Promise && res.status === 'pending') {
 					//res.status === 'pending'时，pro 跟随 res
+					pro.status = 'pending';
 					res.then(function(value){
 						pro.value = value;
 						pro.status = 'fulfilled';
@@ -197,7 +202,6 @@ Events.prototype = {
 						pro.reason = reason;
 						pro.status = 'rejected';
 					});
-					pro.status = 'pending';
 				} else {
 					pro.value = that.value;
 					pro.reason = that.reason;
@@ -212,13 +216,12 @@ Events.prototype = {
 	function resolve(value) {
 		//Promise 对象直接返回
 		if(value instanceof Promise) {
-			return reason;
+			return value;
 		}
 		
-		var pro = new Promise(),
-			tem = new Promise();
+		var pro = new Promise();
 		
-		//跟随 thenable 对象，这个跟随不知道怎么实现
+		//跟随 thenable 对象，这个跟随不知道怎么实现，有兴趣的可以试试
 		if(typeof value === 'object' && value.then != null) {
 			//pro.follow(value);
 			//value.then(Promise.resolve, Promise.reject);
@@ -240,57 +243,75 @@ Events.prototype = {
 	}
 	
 	function all(iterable) {
-		var pro = new Promise(),
-			valueArr = [],
-			err;
-		
+		//如果 iterable 不是一个可迭代对象
 		if(iterable[Symbol.iterator] == undefined) {
-			err = new TypeError(typeof iterable + iterable + ' is not iterable (cannot read property Symbol(Symbol.iterator))');
+			let err = new TypeError(typeof iterable + iterable + ' is not iterable (cannot read property Symbol(Symbol.iterator))');
 			return Promise.reject(err);
 		}
 		
+		//如果 iterable 对象为空
 		if(iterable.length === 0) {
 			return Promise.resolve([]);
 		}
 		
+		//其它情况用异步处理
+		var pro = new Promise(),	//all 返回的 promise 对象
+			valueArr = [];			//all 返回的 promise 对象的 value 属性
+		
 		setTimeout(function() {
+			var index = 0,	//记录当前索引
+				count = 0,
+				len = iterable.length;
+			
 			for(let val of iterable) {
-				if(val instanceof Promise) {
-					if(val.status === 'pending') {
-						val.then(function(value) {
-							valueArr[iterable.indexOf(val)] = val.value;
-						}, function(reason) {
+				-function(i){
+					if(val instanceof Promise) {		//当前值为 Promise 对象时
+						if(val.status === 'pending') {
+							val.then(function(value) {
+								valueArr[i] = value;
+								count++;
+								//Promise.all([new Promise(function(resolve){setTimeout(resolve, 100, 1)}), 2, 3, 4])
+								if(count === len) {
+									pro.value = valueArr;
+									pro.status = 'fulfilled';
+								}
+							}, function(reason) {
+								pro.reason = reason;
+								pro.status = 'rejected';
+								//当一个pending Promise首先完成时，解除其它 pending Promise的事件，防止之后其它 Promise 改变 pro 的状态
+								removeEv(iterable);
+							});
+						} else if(val.status === 'rejected') {
 							pro.reason = val.reason;
-							pro.value = undefined;
 							pro.status = 'rejected';
-							//当一个Promise首先完成时，解除其它 Promise 的事件，防止之后其它Promise触发事件
-							setTimeout(() => pro.events.removeEvent('change'), 0);
-						})
-					} else if(val.status === 'rejected') {
-						pro.reason = val.reason;
-						pro.status = 'rejected';
-						return;
+							return;
+						} else {
+							//val.status === 'fulfilled'
+							valueArr[i] = val.value;
+							count++;
+						}
 					} else {
-						valueArr[iterable.indexOf(val)] = val.value;
+						valueArr[i] = val;
+						count++;
 					}
-				} else {
-					valueArr[iterable.indexOf(val)] = val;
-				}
+					index++;
+				}(index);
 			}
 			
-			pro.value = valueArr;
-			pro.status = 'fulfilled';
+			//如果 iterable 对象中的 promise 对象都变为 fulfilled 状态，或者 iterable 对象内没有 promise 对象,
+			//由于我们可能需要等待 pending promise 的结果，所以要额外花费一个变量计数，而不能用valueArr的长度判断。
+			if(count === len) {
+				pro.value = valueArr;
+				pro.status = 'fulfilled';
+			}
 		}, 0);
 		
 		return pro;
 	}
 	
 	function race(iterable) {
-		var pro = new Promise(),
-			err;
-		
 		if(iterable[Symbol.iterator] == undefined) {
-			err = new TypeError(typeof iterable + iterable + ' is not iterable (cannot read property Symbol(Symbol.iterator))');
+			let err = new TypeError(typeof iterable + iterable + ' is not iterable (cannot read property Symbol(Symbol.iterator))');
 			return Promise.reject(err);
 		}
 		
@@ -298,32 +319,36 @@ Events.prototype = {
 			return Promise.resolve([]);
 		}
 		
+		var pro = new Promise();
+		
 		setTimeout(function() {
 			for(let val of iterable) {
 				if(val instanceof Promise) {
 					if(val.status === 'pending') {
 						val.then(function(value) {
-							pro.value = val.value;
+							pro.value = value;
 							pro.status = 'fulfilled';
-							//防止之后其它Promise触发事件
-							setTimeout(() => pro.events.removeEvent('change'), 0);
+							removeEv(iterable);
 						}, function(reason) {
-							pro.reason = val.reason;
+							pro.reason = reason;
 							pro.status = 'rejected';
-							setTimeout(() => pro.events.removeEvent('change'), 0);
-						})
+							removeEv(iterable);
+						});
 					} else if(val.status === 'rejected') {
 						pro.reason = val.reason;
 						pro.status = 'rejected';
+						removeEv(iterable);
 						return;
 					} else {
 						pro.value = val.value;
 						pro.status = 'fulfilled';
+						removeEv(iterable);
 						return;
 					}
 				} else {
 					pro.value = val;
 					pro.status = 'fulfilled';
+					removeEv(iterable);
 					return;
 				}
 			}
@@ -344,27 +369,35 @@ Events.prototype = {
 		return pro instanceof Promise ? pro.status === 'fulfilled' || pro.status === 'rejected' : false;
 	}
 	
+	function removeEv(iterable) {
+		for(let uselessPromise of iterable) {
+			if(uselessPromise instanceof Promise && uselessPromise.status === 'pending') {
+				uselessPromise.events.removeEvent('change');
+			}
+		}
+	}
+	
 	window.Promise = Promise;
 })();
 
 var fromCallback;
 
 var fromThen = Promise.resolve('done')
-.then(function onFulfilled() {
+.then(function onFulfilled(value) {
     fromCallback = new Promise(function(resolve){
-    	setTimeout(() => resolve(3), 0);
+    	setTimeout(() => resolve(value), 0);	//未执行 setTimeout 的回调方法之前 fromCallback 为'pending'状态
     });
-    return fromCallback;	//未执行setTimeout异步前fromCallback为'pending'
+    return fromCallback;	//then 方法返回的 fromThen 将跟随 onFulfilled 方法返回的 fromCallback
 });
 
 setTimeout(function() {
-	//执行 then 中回调onFulfilled后，fromCallback为'pending'，所以fromThen‘跟随’fromCallback，随之变化
-    console.log(fromCallback);    //fromCallback.status === 'pending'
-    console.log(fromThen);        //fromThen.status === 'pending'
+	//目前已执行完 onFulfilled 回调函数，fromCallback 为'pending'状态，fromThen ‘跟随’ fromCallback
+    console.log(fromCallback.status);    //fromCallback.status === 'pending'
+    console.log(fromThen.status);        //fromThen.status === 'pending'
     setTimeout(function() {
-    	// onFulfilled 中的 异步 resolve 执行后，fromCallback 变为'resolved'，fromThen 也跟着变为'resolved'
-	    console.log(fromCallback);    //fromCallback.status === 'resolved'
-	    console.log(fromThen);        //fromThen.status === 'resolved'
+    	//目前已执行完 setTimeout 中的回调函数，fromCallback 为'fulfilled'状态，fromThen 也跟着变为'fulfilled'状态
+	    console.log(fromCallback.status + ' ' + fromCallback.value);    //fromCallback.status === 'fulfilled'
+	    console.log(fromThen.status + ' ' + fromThen.value);        //fromThen.status === 'fulfilled'
 	    console.log(fromCallback === fromThen);		//false
-	}, 100);
+	}, 10);	//将这个 delay 参数改为 0 试试
 }, 0);
