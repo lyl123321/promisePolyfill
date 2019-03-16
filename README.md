@@ -14,7 +14,7 @@ ES6 的`Promise`对象是一个代理对象，被代理的值在`Promise`对象�
 一旦一个`Promise`对象的状态发生改变，就会触发之前通过Promise.prototype.`then`、 Promise.prototype.`catch`和 Promise.prototype.`finally`方法绑定的`onfulfilled`、`onrejected`和`onFinally`处理方法。
 因为 `then`、`catch`和`finally`方法都会返回一个新的`Promise`对象， 所以它们可以被链式调用。
 
-https://github.com/lyl123321/promisePolyfill/images/image.png
+![image](https://github.com/lyl123321/promisePolyfill/images/image.png)
 
 ### 构造函数 ###
 构造函数`Promise()`主要用来包装还未支持 promises 的函数。
