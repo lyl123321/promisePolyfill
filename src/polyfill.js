@@ -399,5 +399,5 @@ setTimeout(function() {
 	    console.log(fromCallback.status + ' ' + fromCallback.value);    //fromCallback.status === 'fulfilled'
 	    console.log(fromThen.status + ' ' + fromThen.value);        //fromThen.status === 'fulfilled'
 	    console.log(fromCallback === fromThen);		//false
-	}, 10);	//将这个 delay 参数改为 0 试试
+	}, 100);	//将这个 delay 参数改为 0 试试
 }, 0);
