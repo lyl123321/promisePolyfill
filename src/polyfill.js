@@ -1,5 +1,5 @@
 'use strict';
-//事件发布者构造函数
+//原型实现观察者模式
 function Events() {
     this._listeners = {};
 }
