@@ -149,7 +149,7 @@ Events.prototype = {
 						pro.status = 'rejected';
 					} else {								//情况6
 						//res.status === 'pending'时，pro 跟随 res
-						pro.status = 'pending';
+						//pro.status = 'pending';
 						res.then(function(value){
 							pro.value = value;
 							pro.status = 'fulfilled';
@@ -194,7 +194,7 @@ Events.prototype = {
 					pro.status = 'rejected';
 				} else if(res instanceof Promise && res.status === 'pending') {
 					//res.status === 'pending'时，pro 跟随 res
-					pro.status = 'pending';
+					//pro.status = 'pending';
 					res.then(function(value){
 						pro.value = value;
 						pro.status = 'fulfilled';
