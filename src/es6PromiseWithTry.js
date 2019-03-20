@@ -76,20 +76,37 @@ Events.prototype = {
 		if(typeof executor === 'function') {
 			//捕获错误
 			try {
-				executor.call(null, function resolve(value) {
-					self.value = value;
-					self.status = 'fulfilled';
-				}, function reject(reason) {
-					self.reason = reason;
+				executor.call(null, function resolve(valueArg) {
+					if(valueArg instanceof Promise) {
+						if(valueArg.status === 'fulfilled') {
+							self.value = valueArg.value;
+							self.status = 'fulfilled';
+						} else if (valueArg.status === 'rejected') {
+							self.reason = valueArg.reason;
+							self.status = 'rejected';
+						} else {
+							valueArg.then(function(value){
+								self.value = value;
+								self.status = 'fulfilled';
+							},function(reason) {
+								self.reason = reason;
+								self.status = 'rejected';
+							});
+						}
+					} else {
+						self.value = valueArg;
+						self.status = 'fulfilled';
+					}
+				}, function reject(reasonArg) {
+					self.reason = reasonArg;
 					self.status = 'rejected';
+					throw reasonArg;
 				});
 			} catch(err) {
 				self.reason = err;
 				self.status = 'rejected';
-				setTimeout(() => {throw `(in promise) ${err}`});
+				setTimeout(() => {throw `(in promiseddd) ${err}`});
 			}
-		} else {
-			throw new TypeError('Promise resolver undefined is not a function');
 		}
 	}
 	
