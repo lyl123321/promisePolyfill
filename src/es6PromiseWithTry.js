@@ -249,7 +249,12 @@ Events.prototype = {
 	
 	//实现 Promise.try
 	function tryFn(fn, thisArg = null, ...args) {
-		return new Promise(resolve => resolve(fn.apply(thisArg, args)));
+		if(typeof fn === 'function') {
+			return new Promise(resolve => resolve(fn.apply(thisArg, args)));
+		} else {
+			const err = new TypeError(`${typeof fn} ${fn} is not a function`);
+			return Promise.try(() => {throw err});
+		}
 	}
 	
 	function all(iterable) {
@@ -392,23 +397,26 @@ Promise.try = function(func) {
     });
 }
 
-/*
 //测试1: $Promise.try
 function synError() {
 	throw new Error('Synchronous error!');
 }
 
-let p1 = $Promise.try(() => synError());		//等价于 let p1 = $Promise.try(synError);
+let p = $Promise.try(() => synError());		//等价于 let p1 = $Promise.try(synError);
 
 //如果想传参
-let p2 = $Promise.try(function(a) {
+let p1 = $Promise.try(function(a) {
 	throw a;
-}, null, 1);
+}, null, 'error');
 
+//如果非函数
+let p2 = $Promise.try(2);
+
+console.log(p);
 console.log(p1);
 console.log(p2);
-*/
 
+/*
 //测试2：比较 Promise.try 与 $Promise.try
 let p3 = Promise.try(() => {throw 'promise'});
 let p4 = $Promise.try(() => {throw '$promise'});
@@ -416,7 +424,6 @@ let p4 = $Promise.try(() => {throw '$promise'});
 console.log(p3);
 console.log(p4);
 
-/*
 //测试3：比较 Promise.all 与 $Promise.all
 let p5 = Promise.all(1);
 let p6 = $Promise.all(1);
