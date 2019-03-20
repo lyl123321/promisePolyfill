@@ -74,6 +74,7 @@ Events.prototype = {
 		});
 		
 		if(typeof executor === 'function') {
+			//捕获错误
 			try {
 				executor.call(null, function resolve(value) {
 					self.value = value;
@@ -85,6 +86,7 @@ Events.prototype = {
 			} catch(err) {
 				self.reason = err;
 				self.status = 'rejected';
+				setTimeout(() => {throw `(in promise) ${err}`});
 			}
 		} else {
 			throw new TypeError('Promise resolver undefined is not a function');
@@ -245,14 +247,15 @@ Events.prototype = {
 		return pro;
 	}
 	
+	//实现 Promise.try
 	function tryFn(fn, thisArg = null, ...args) {
 		return new Promise(resolve => resolve(fn.apply(thisArg, args)));
 	}
 	
 	function all(iterable) {
 		if(iterable[Symbol.iterator] === undefined) {
-			const err = new TypeError(typeof iterable + iterable + ' is not iterable (cannot read property Symbol(Symbol.iterator))');
-			return Promise.reject(err);
+			const err = new TypeError(`${typeof iterable} ${iterable} is not iterable (cannot read property Symbol(Symbol.iterator))`);
+			return Promise.try(() => {throw err});
 		}
 		
 		const iteArray = Array.from(iterable);
@@ -314,8 +317,8 @@ Events.prototype = {
 	
 	function race(iterable) {
 		if(iterable[Symbol.iterator] === undefined) {
-			const err = new TypeError(typeof iterable + iterable + ' is not iterable (cannot read property Symbol(Symbol.iterator))');
-			return Promise.reject(err);
+			const err = new TypeError(`${typeof iterable} ${iterable} is not iterable (cannot read property Symbol(Symbol.iterator))`);
+			return Promise.try(() => {throw err});
 		}
 		
 		const iteArray = Array.from(iterable);
@@ -379,43 +382,45 @@ Events.prototype = {
 		}
 	}
 	
-	window.Promise = Promise;
+	window.$Promise = Promise;
 })();
-/*
-var fromCallback;
 
-var fromThen = Promise.resolve('done')
-.then(function onFulfilled(value) {
-    fromCallback = new Promise(function(resolve){
-    	setTimeout(() => resolve(value), 0);	//未执行 setTimeout 的回调方法之前 fromCallback 为'pending'状态
+//给原生 Promise 扩展 try 方法
+Promise.try = function(func) {
+    return new Promise(function(resolve, reject) {
+        resolve(func());
     });
-    return fromCallback;	//then 方法返回的 fromThen 将跟随 onFulfilled 方法返回的 fromCallback
-});
+}
 
-setTimeout(function() {
-	//目前已执行完 onFulfilled 回调函数，fromCallback 为'pending'状态，fromThen ‘跟随’ fromCallback
-    console.log(fromCallback.status);    //fromCallback.status === 'pending'
-    console.log(fromThen.status);        //fromThen.status === 'pending'
-    setTimeout(function() {
-    	//目前已执行完 setTimeout 中的回调函数，fromCallback 为'fulfilled'状态，fromThen 也跟着变为'fulfilled'状态
-	    console.log(fromCallback.status + ' ' + fromCallback.value);    //fromCallback.status === 'fulfilled'
-	    console.log(fromThen.status + ' ' + fromThen.value);        //fromThen.status === 'fulfilled'
-	    console.log(fromCallback === fromThen);		//false
-	}, 10);	//将这个 delay 参数改为 0 试试
-}, 0);
-*/
+/*
+//测试1: $Promise.try
 function synError() {
 	throw new Error('Synchronous error!');
 }
 
-let p1 = Promise.try(() => synError());
-
-//等价于
-//let p1 = Promise.try(synError);
+let p1 = $Promise.try(() => synError());		//等价于 let p1 = $Promise.try(synError);
 
 //如果想传参
-let p2 = Promise.try(function(a) {
+let p2 = $Promise.try(function(a) {
 	throw a;
 }, null, 1);
 
-console.log(p1, p2);
+console.log(p1);
+console.log(p2);
+*/
+
+//测试2：比较 Promise.try 与 $Promise.try
+let p3 = Promise.try(() => {throw 'promise'});
+let p4 = $Promise.try(() => {throw '$promise'});
+
+console.log(p3);
+console.log(p4);
+
+/*
+//测试3：比较 Promise.all 与 $Promise.all
+let p5 = Promise.all(1);
+let p6 = $Promise.all(1);
+
+console.log(p5);
+console.log(p6);
+*/
