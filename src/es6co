@@ -1,0 +1,111 @@
+ function co(gen, ...args) {
+	const ctx = this;
+	
+	return new Promise(function(resolve, reject) {
+		if(typeof gen === 'function') gen = gen.apply(ctx, args);
+		if(!isGenerator(gen)) return resolve(gen);
+		
+		onFulfilled();
+		
+		function onFulfilled(value) {
+			let res;
+			
+			try {
+				res = gen.next(value);
+			} catch(err) {
+				return reject(err);
+			}
+			
+			next(res);
+		}
+		
+		function onRejected(reason) {
+			let res;
+			
+			try {
+				res = gen.throw(reason);
+			} catch(err) {
+				return reject(err);
+			}
+			
+			next(res);
+		}
+		
+		function next(res) {
+			if(res.done) return resolve(res.value);
+			const value = toPromise.call(ctx, res.value);
+			value.then(onFulfilled, onRejected);
+		}
+	});
+}
+
+function isPromise(obj) {
+	if(typeof obj.then !== 'function') return false;
+	return obj instanceof Promise;
+}
+
+function isGenerator(obj) {
+	if(typeof obj.next === 'function' && typeof obj.throw === 'function') return true;
+	//if(obj[Symbol.iterator]() === obj) return true;
+}
+
+function isGeneratorFunction(obj) {
+	const constructor = obj.constructor;
+	if(!constructor) return false;
+	if(constructor.name === 'GeneratorFunction') return true;
+	return isGenerator(constructor.prototype.prototype);
+}
+
+function toPromise(obj) {
+	if(isPromise(obj)) return obj;
+	if(isGenerator(obj) || isGeneratorFunction(obj)) return co.call(this, obj);
+	if(typeof obj === 'function') return thunkToPromise.call(this, obj);
+	if(Array.isArray(obj)) return arrayToPromise.call(this, obj);
+	if(typeof obj === 'object') return objectToPromise.call(this, obj);
+	return Promise.resolve(obj);
+}
+
+function thunkToPromise(fn) {
+	const ctx = this;
+	
+	return new Promise(function(resolve, reject) {
+		fn.call(ctx, (err, ...data) => {
+			if(err) return reject(err);
+			data.length > 2 ? resolve(data) : resolve(...data);
+		})
+	});
+}
+
+function arrayToPromise(arr) {
+	return Promise.all(arr.map(toPromise, this));
+}
+
+function objectToPromise(obj) {
+	//Error 对象
+	if(obj instanceof Error) return Promise.reject(obj);
+	
+	//thenable 对象
+	if(typeof obj.then === 'function') return Promise.resolve(obj);
+	
+	//普通对象
+	const result = Object.create(obj.prototype || {});
+	const keys = Reflect.ownKeys(obj);
+	const promises = [];
+	
+	for(const key of keys) {
+		const promise = toPromise.call(this, obj[key]);
+		if(promise && isPromise(promise)) {
+			defer(promise, key);
+		} else {
+			result[key] = obj[key];
+		}
+	}
+	
+	function defer(promise, key) {
+		result[key] = undefined;
+		const pro = promise.then(value => result[key] = value);
+		promises.push(pro);
+	}
+	
+	return Promise.all(promises).then(() => result);
+}
