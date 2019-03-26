@@ -214,18 +214,15 @@ Events.prototype = {
 	}
 	
 	function resolve(value) {
-		//Promise 对象直接返回
 		if(value instanceof Promise) {
 			return value;
 		}
 		
-		var pro = new Promise();
-		
-		//跟随 thenable 对象，这个跟随不知道怎么实现，有兴趣的可以试试
-		if(typeof value === 'object' && value.then != null) {
-			//pro.follow(value);
-			//value.then(Promise.resolve, Promise.reject);
+		if(typeof value === 'object' && typeof value.then === 'function') {
+			return new Promise(value.then);
 		}
+		
+		const pro = new Promise();
 		
 		pro.value = value;
 		pro.status = 'fulfilled';
