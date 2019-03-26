@@ -40,11 +40,13 @@ export default function co(gen, ...args) {
 }
 
 function isPromise(obj) {
+	if(typeof obj !== 'object') return false;
 	if(typeof obj.then !== 'function') return false;
 	return obj instanceof Promise;
 }
 
 function isGenerator(obj) {
+	if(typeof obj !== 'object') return false;
 	if(typeof obj.next === 'function' && typeof obj.throw === 'function') return true;
 	//if(obj[Symbol.iterator]() === obj) return true;
 }
