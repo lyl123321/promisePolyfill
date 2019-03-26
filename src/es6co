@@ -1,4 +1,4 @@
- function co(gen, ...args) {
+export default function co(gen, ...args) {
 	const ctx = this;
 	
 	return new Promise(function(resolve, reject) {
