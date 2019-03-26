@@ -243,11 +243,11 @@ Events.prototype = {
 			return value;
 		}
 		
-		const pro = new Promise();
-		
-		if(typeof value === 'object' && value.then != null) {
-			//pro.follow(value);
+		if(typeof value === 'object' && typeof value.then === 'function') {
+			return new Promise(value.then);
 		}
+		
+		const pro = new Promise();
 		
 		pro.value = value;
 		pro.status = 'fulfilled';
