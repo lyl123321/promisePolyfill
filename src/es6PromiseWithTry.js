@@ -77,35 +77,15 @@ Events.prototype = {
 			//捕获错误
 			try {
 				executor.call(null, function resolve(valueArg) {
-					if(valueArg instanceof Promise) {
-						if(valueArg.status === 'fulfilled') {
-							self.value = valueArg.value;
-							self.status = 'fulfilled';
-						} else if (valueArg.status === 'rejected') {
-							self.reason = valueArg.reason;
-							self.status = 'rejected';
-						} else {
-							valueArg.then(function(value){
-								self.value = value;
-								self.status = 'fulfilled';
-							},function(reason) {
-								self.reason = reason;
-								self.status = 'rejected';
-							});
-						}
-					} else {
-						self.value = valueArg;
-						self.status = 'fulfilled';
-					}
+					innerResolve(self, valueArg);
 				}, function reject(reasonArg) {
 					self.reason = reasonArg;
 					self.status = 'rejected';
-					throw reasonArg;
 				});
 			} catch(err) {
 				self.reason = err;
 				self.status = 'rejected';
-				setTimeout(() => {throw `(in promiseddd) ${err}`});
+				setTimeout(() => {throw `(in promise) ${err}`});
 			}
 		}
 	}
@@ -147,51 +127,24 @@ Events.prototype = {
 		
 		then: function(onFulfilled = identity, onRejected = thrower) {
 			const pro = new Promise();
-			
-			this.events.addEvent('change', hander.bind(null, this));
-			
-			function hander(that) {
+			const hander = () => {
 				let res;
-				
 				try {
-					if(that.status === 'fulfilled') {
+					if(this.status === 'fulfilled') {
 						typeof onFulfilled !== 'function' ? onFulfilled = identity : false;
-						
-						res = onFulfilled.call(null, that.value);
-					} else if(that.status === 'rejected') {
+						res = onFulfilled.call(null, this.value);
+					} else if(this.status === 'rejected') {
 						typeof onRejected !== 'function' ? onRejected = thrower : false;
-						
-						res = onRejected.call(null, that.reason);
+						res = onRejected.call(null, this.reason);
 					}
 				} catch(err) {
 					pro.reason = err;
 					pro.status = 'rejected';
-					
 					return;
 				}
-				
-				if(res instanceof Promise) {
-					if(res.status === 'fulfilled') {
-						pro.value = res.value;
-						pro.status = 'fulfilled';
-					} else if (res.status === 'rejected') {
-						pro.reason = res.reason;
-						pro.status = 'rejected';
-					} else {
-						res.then(function(value){
-							pro.value = value;
-							pro.status = 'fulfilled';
-						},function(reason) {
-							pro.reason = reason;
-							pro.status = 'rejected';
-						});
-					}
-				} else {
-					pro.value = res;
-					pro.status = 'fulfilled';
-				}
+				innerResolve(pro, res);
 			}
-			
+			this.events.addEvent('change', hander);
 			return pro;
 		},
 		
@@ -201,39 +154,27 @@ Events.prototype = {
 		
 		finally: function(onFinally) {
 			const pro = new Promise();
-			
-			this.events.addEvent('change', hander.bind(null, this));
-			
-			function hander(that) {
+			const hander = () => {
 				let res;
-				
 				try {
 					res = typeof onFinally === 'function' ? onFinally() : undefined;
 				} catch(err) {
 					pro.reason = err;
 					pro.status = 'rejected';
-					
 					return;
 				}
-				
 				if(res instanceof Promise && res.status === 'rejected') {
 					pro.reason = res.reason;
 					pro.status = 'rejected';
 				} else if(res instanceof Promise && res.status === 'pending') {
-					res.then(function(value){
-						pro.value = value;
-						pro.status = 'fulfilled';
-					},function(reason) {
-						pro.reason = reason;
-						pro.status = 'rejected';
-					});
+					follow(pro, res);
 				} else {
-					pro.value = that.value;
-					pro.reason = that.reason;
-					pro.status = that.status;
+					pro.value = this.value;
+					pro.reason = this.reason;
+					pro.status = this.status;
 				}
 			}
-			
+			this.events.addEvent('change', hander);
 			return pro;
 		},
 	}
@@ -243,6 +184,7 @@ Events.prototype = {
 			return value;
 		}
 		
+		//thenable 对象
 		if(typeof value === 'object' && typeof value.then === 'function') {
 			return new Promise(value.then);
 		}
@@ -264,7 +206,7 @@ Events.prototype = {
 		return pro;
 	}
 	
-	//实现 Promise.try
+	//实现 Promise.try, 方便处理一个函数
 	function tryFn(fn, thisArg = null, ...args) {
 		if(typeof fn === 'function') {
 			return new Promise(resolve => resolve(fn.apply(thisArg, args)));
@@ -404,7 +346,34 @@ Events.prototype = {
 		}
 	}
 	
-	window.$Promise = Promise;
+	function follow(a, b) {
+		b.then(function(value) {
+			a.value = value;
+			a.status = 'fulfilled';
+		}, function(reason) {
+			a.reason = reason;
+			a.status = 'rejected';
+		});
+	}
+	
+	function innerResolve(self, valueArg) {
+		if(valueArg instanceof Promise) {
+			if(valueArg.status === 'fulfilled') {
+				self.value = valueArg.value;
+				self.status = 'fulfilled';
+			} else if(valueArg.status === 'rejected') {
+				self.reason = valueArg.reason;
+				self.status = 'rejected';
+			} else {
+				follow(self, valueArg)
+			}
+		} else {
+			self.value = valueArg;
+			self.status = 'fulfilled';
+		}
+	}
+	
+	window.Promise = Promise;
 })();
 
 //给原生 Promise 扩展 try 方法
